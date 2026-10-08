@@ -90,7 +90,7 @@
         <label>R$/tonelada<input id="cTon" type="number" step="0.01" value="0"></label>
         <label>R$/m²<input id="cM2" type="number" step="0.01" value="0"></label>
       </div>
-      <button class="primary" onclick="addContract()">Salvar contrato</button>
+      <div class="form-actions"><button id="contractSaveBtn" class="primary" onclick="addContract()">Salvar contrato</button><button id="contractCancelBtn" class="secondary hidden" onclick="cancelContractEdit()">Cancelar edição</button></div>
     </div>
     <div id="contractList"></div>
   </div>
@@ -105,7 +105,7 @@
         <label>Locação mensal (R$)<input id="eMonthly" type="number" step="0.01"></label>
         <label>Dias/mês<input id="eDays" type="number" value="26"></label>
       </div>
-      <button class="primary" onclick="addEquipment()">Salvar equipamento</button>
+      <div id="equipmentDailyPreview" class="inline-preview"></div><div class="form-actions"><button id="equipmentSaveBtn" class="primary" onclick="addEquipment()">Salvar equipamento</button><button id="equipmentCancelBtn" class="secondary hidden" onclick="cancelEquipmentEdit()">Cancelar edição</button></div>
     </div>
     <div id="equipmentList"></div>
   </div>
@@ -123,7 +123,7 @@
         <label>INSS mensal (R$)<input id="fInss" type="number" step="0.01"></label>
         <label>FGTS mensal (R$)<input id="fFgts" type="number" step="0.01"></label>
       </div>
-      <button class="primary" onclick="saveFixedCost()">Salvar custos fixos</button>
+      <div id="fixedDailyPreview" class="inline-preview"></div><div class="form-actions"><button id="fixedSaveBtn" class="primary" onclick="saveFixedCost()">Salvar custos fixos</button><button id="fixedCancelBtn" class="secondary hidden" onclick="cancelFixedCostEdit()">Cancelar edição</button></div>
     </div>
     <div id="fixedCostList"></div>
   </div>

@@ -25,3 +25,10 @@
 .cost-lines>div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed #e5e7eb}
 .cost-lines span{color:#6b7280;font-size:12px}.cost-lines b{font-size:12px}
 .hint{font-size:12px;color:#6b7280;margin-top:-4px}
+
+.form-actions{display:flex;gap:10px;margin-top:10px}.form-actions button{flex:1}
+.inline-preview{margin:10px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;font-size:12px;color:#475569}
+.inline-preview b{color:#111827}.daily-preview-grid{display:grid;grid-template-columns:1fr;gap:5px;margin-top:7px}
+.daily-preview-grid span{display:flex;justify-content:space-between;gap:10px}.daily-preview-grid strong{color:#111827}
+.row-actions.compact{margin-top:0;flex-wrap:wrap}.row-actions.compact button{padding:7px 9px;font-size:12px}
+.status-pill{font-size:11px;font-weight:800;padding:5px 8px;border-radius:999px}.status-pill.on{background:#ecfdf5;color:#15803d}.status-pill.off{background:#f3f4f6;color:#6b7280}
