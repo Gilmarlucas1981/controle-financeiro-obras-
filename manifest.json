@@ -1,0 +1,8 @@
+{
+  "name": "Controle Financeiro de Obras",
+  "short_name": "Obras Financeiro",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#111827"
+}
