@@ -53,11 +53,11 @@
   <div class="card form">
     <div class="grid2">
       <label>Data<input id="lDate" type="date"></label>
-      <label>Obra<select id="lObra" onchange="refreshLaunchDefaults()"></select></label>
+      <label>Obra<select id="lObra" onchange="refreshLaunchTeams()"></select></label>
       <label>Equipe<select id="lEquipe" onchange="refreshLaunchDefaults()"></select></label>
       <label>Produção<input id="lProd" type="number" step="0.001" value="0"></label>
       <label>Unidade<select id="lUnit" onchange="refreshLaunchDefaults()"><option value="tonelada">tonelada</option><option value="m²">m²</option></select></label>
-      <label>Contrato/unidade (R$)<input id="lContract" type="number" step="0.01"></label>
+      <label>Contrato/unidade (R$)<input id="lContract" type="number" step="0.01" readonly></label>
       <label>Combustível (R$)<input id="lFuel" type="number" step="0.01" value="0"></label>
       <label>Pedágio (R$)<input id="lToll" type="number" step="0.01" value="0"></label>
       <label>Manutenção (R$)<input id="lMaint" type="number" step="0.01" value="0"></label>

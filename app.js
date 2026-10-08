@@ -79,7 +79,13 @@ function contractFor(obra,equipe){return state.contracts.find(x=>x.obra===obra&&
 function equipDay(obra,equipe){return sum(state.equipments.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe),x=>x.mensal/(x.diasMes||26))}
 function peopleDay(obra,equipe){
  const c=contractFor(obra,equipe),days=c?.diasMes||26,ps=state.collaborators.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe);
- return {folha:sum(ps,x=>x.salary/days),inss:sum(ps,x=>(x.salary*(x.inss/100))/days),fgts:sum(ps,x=>(x.salary*(x.fgts/100))/days)}
+ if(ps.length){
+   return {folha:sum(ps,x=>x.salary/days),inss:sum(ps,x=>(x.salary*(x.inss/100))/days),fgts:sum(ps,x=>(x.salary*(x.fgts/100))/days),fonte:'cadastro'};
+ }
+ // Enquanto a folha por colaborador não estiver cadastrada no app,
+ // usa como referência o último custo diário registrado na planilha para essa obra/equipe.
+ const hist=[...state.daily].filter(x=>x.obra===obra&&x.equipe===equipe&&(x.folha||x.inss||x.fgts)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||Number(b.id||0)-Number(a.id||0))[0];
+ return hist ? {folha:Number(hist.folha||0),inss:Number(hist.inss||0),fgts:Number(hist.fgts||0),fonte:'historico'} : {folha:0,inss:0,fgts:0,fonte:'zero'};
 }
 function renderDashboard(){
  const s=filterStart.value||monthStart(),e=filterEnd.value||isoToday();filterStart.value=s;filterEnd.value=e;
@@ -89,22 +95,70 @@ function renderDashboard(){
  summaryList.innerHTML=Object.values(map).sort((a,b)=>(b.receita-b.custo)-(a.receita-a.custo)).map(x=>{const r=x.receita-x.custo,mg=x.receita?r/x.receita:0;return `<div class="summary-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe}</div></div><div class="money ${r>=0?'good':'bad'}">${brl(r)}</div></div><div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><div><span>Custo</span><b>${brl(x.custo)}</b></div><div><span>Margem</span><b>${num(mg*100,1)}%</b></div><div><span>Produção t</span><b>${num(x.prodT,2)}</b></div><div><span>Produção m²</span><b>${num(x.prodM2,2)}</b></div></div></div>`}).join('')||'<div class="card">Sem lançamentos no período.</div>'
 }
 function fillSelect(el,values){const cur=el.value;el.innerHTML=values.map(x=>`<option>${x}</option>`).join('');if(values.includes(cur))el.value=cur}
+function validTeamsForObra(obra){
+ return [...new Set(state.contracts.filter(c=>c.ativo!==false&&c.obra===obra).map(c=>c.equipe))];
+}
+function refreshLaunchTeams(){
+ const valid=validTeamsForObra(lObra.value);
+ const current=lEquipe.value;
+ fillSelect(lEquipe,valid);
+ if(valid.includes(current))lEquipe.value=current;
+ refreshLaunchDefaults();
+}
 function fillSelects(){
  const obs=state.obras.filter(x=>x.ativa!==false).map(x=>x.nome),eqs=state.equipes.filter(x=>x.ativa!==false).map(x=>x.nome);
- [lObra,eObra,pObra].forEach(x=>fillSelect(x,obs));[lEquipe,eEquipe,pEquipe].forEach(x=>fillSelect(x,eqs));
- if(!lDate.value)lDate.value=isoToday();refreshLaunchDefaults()
+ [lObra,eObra,pObra].forEach(x=>fillSelect(x,obs));
+ [eEquipe,pEquipe].forEach(x=>fillSelect(x,eqs));
+ if(!lDate.value)lDate.value=isoToday();
+ refreshLaunchTeams();
 }
-function refreshLaunchDefaults(){const c=contractFor(lObra.value,lEquipe.value);lContract.value=lUnit.value==='m²'?(c?.contratoM2||0):(c?.contratoTon||0);previewLaunch()}
+function refreshLaunchDefaults(){
+ const c=contractFor(lObra.value,lEquipe.value);
+ const v=lUnit.value==='m²'?(c?.contratoM2||0):(c?.contratoTon||0);
+ lContract.value=v||0;
+ previewLaunch();
+}
 document.addEventListener('input',e=>{if(['lProd','lContract','lFuel','lToll','lMaint','lOther'].includes(e.target.id))previewLaunch()})
 function calcLaunch(){
  const obra=lObra.value,equipe=lEquipe.value,prod=Number(lProd.value||0),contr=Number(lContract.value||0),receita=prod*contr;
  const c=contractFor(obra,equipe)||{},p=peopleDay(obra,equipe),eq=equipDay(obra,equipe),iss=receita*Number(c.issPct||0)/100;
  const fuel=Number(lFuel.value||0),toll=Number(lToll.value||0),maint=Number(lMaint.value||0),other=Number(lOther.value||0);
  const custo=p.folha+p.inss+p.fgts+iss+eq+fuel+toll+maint+other,res=receita-custo,mg=receita?res/receita:0;
- return {receita,folha:p.folha,inss:p.inss,fgts:p.fgts,iss,equipamentos:eq,custo,resultado:res,margem:mg,custoUnidade:prod?custo/prod:0}
+ return {receita,folha:p.folha,inss:p.inss,fgts:p.fgts,iss,equipamentos:eq,combustivel:fuel,pedagio:toll,manutencao:maint,outras:other,custo,resultado:res,margem:mg,custoUnidade:prod?custo/prod:0,folhaFonte:p.fonte,contrato:contr}
 }
-function previewLaunch(){if(!window.lObra)return;const x=calcLaunch();launchPreview.innerHTML=`Receita <b>${brl(x.receita)}</b> · Custos <b>${brl(x.custo)}</b><br>Resultado <b class="${x.resultado>=0?'money good':'money bad'}">${brl(x.resultado)}</b> · Margem ${num(x.margem*100,1)}%`}
+function previewLaunch(){
+ if(!window.lObra)return;
+ const c=contractFor(lObra.value,lEquipe.value),x=calcLaunch();
+ if(!c){
+   launchPreview.innerHTML='<div class="auto-warning">⚠️ Esta obra/equipe não possui contrato cadastrado.</div>';
+   return;
+ }
+ const fonte=x.folhaFonte==='historico'?'Último custo diário da planilha':(x.folhaFonte==='cadastro'?'Cadastro de colaboradores':'Sem folha cadastrada');
+ launchPreview.innerHTML=`
+ <div class="auto-title">Cálculo automático</div>
+ <div class="auto-grid">
+  <div><span>Contrato/unidade</span><b>${brl(x.contrato)}</b></div>
+  <div><span>Receita</span><b>${brl(x.receita)}</b></div>
+  <div><span>Folha bruta/dia</span><b>${brl(x.folha)}</b></div>
+  <div><span>INSS/dia</span><b>${brl(x.inss)}</b></div>
+  <div><span>FGTS/dia</span><b>${brl(x.fgts)}</b></div>
+  <div><span>ISS/dia</span><b>${brl(x.iss)}</b></div>
+  <div><span>Equipamentos/dia</span><b>${brl(x.equipamentos)}</b></div>
+  <div><span>Combustível</span><b>${brl(x.combustivel)}</b></div>
+  <div><span>Pedágio</span><b>${brl(x.pedagio)}</b></div>
+  <div><span>Manutenção</span><b>${brl(x.manutencao)}</b></div>
+  <div><span>Outras despesas</span><b>${brl(x.outras)}</b></div>
+  <div><span>Custo total</span><b>${brl(x.custo)}</b></div>
+  <div><span>Resultado</span><b class="${x.resultado>=0?'good':'bad'}">${brl(x.resultado)}</b></div>
+  <div><span>Margem</span><b class="${x.margem>=0?'good':'bad'}">${num(x.margem*100,1)}%</b></div>
+  <div><span>Custo/unidade</span><b>${brl(x.custoUnidade)}</b></div>
+ </div>
+ <div class="auto-source">Folha: ${fonte}</div>`;
+}
 async function saveLaunch(){
+ const contrato=contractFor(lObra.value,lEquipe.value);
+ if(!contrato)return alert('Cadastre o contrato desta obra/equipe antes de lançar.');
+ if(Number(lProd.value||0)>0 && Number(lContract.value||0)<=0)return alert('O contrato por unidade está zerado. Confira o cadastro antes de salvar.');
  const x=calcLaunch(),obra=state.obras.find(o=>o.nome===lObra.value),equipe=state.equipes.find(e=>e.nome===lEquipe.value);
  const payload={data:lDate.value,obra_id:obra.id,equipe_id:equipe.id,producao:Number(lProd.value||0),unidade:lUnit.value,contrato_unidade:Number(lContract.value||0),receita:x.receita,folha_bruta_dia:x.folha,inss_dia:x.inss,fgts_dia:x.fgts,iss_dia:x.iss,locacao_equipamentos_dia:x.equipamentos,combustivel:Number(lFuel.value||0),pedagio:Number(lToll.value||0),manutencao:Number(lMaint.value||0),outras_despesas:Number(lOther.value||0),custo_total:x.custo,lucro_prejuizo:x.resultado,margem:x.margem,custo_unidade:x.custoUnidade,alerta:x.resultado<0?'ALERTA: PREJUÍZO':'LUCRO',origem:'app'};
  const {error}=await sb.from('lancamentos_diarios').insert(payload);
