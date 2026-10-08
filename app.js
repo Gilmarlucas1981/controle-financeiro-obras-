@@ -1,5 +1,6 @@
 const sb=window.supabase.createClient(CFG.url,CFG.key);
-let state={obras:[],equipes:[],contracts:[],equipments:[],collaborators:[],daily:[]};
+let state={obras:[],equipes:[],contracts:[],equipments:[],fixedCosts:[],collaborators:[],daily:[]};
+let editingLaunchId=null;
 
 const brl=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const num=(v,d=2)=>Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -28,15 +29,16 @@ loginForm.onsubmit=async e=>{
 logout.onclick=async()=>{await sb.auth.signOut();login.classList.remove('hidden')};
 
 async function loadCloud(){
-  const [o,e,c,eq,p,l]=await Promise.all([
+  const [o,e,c,eq,fc,p,l]=await Promise.all([
     sb.from('obras').select('*').order('nome'),
     sb.from('equipes').select('*').order('nome'),
     sb.from('contratos_obra_equipe').select('*'),
     sb.from('equipamentos').select('*').order('descricao'),
+    sb.from('custos_fixos_equipe').select('*'),
     sb.from('colaboradores').select('*').order('nome'),
     sb.from('lancamentos_diarios').select('*').order('data',{ascending:true}).order('id',{ascending:true})
   ]);
-  const err=[o,e,c,eq,p,l].find(x=>x.error);
+  const err=[o,e,c,eq,fc,p,l].find(x=>x.error);
   if(err){alert('Erro ao carregar dados: '+err.error.message);return}
   state.obras=o.data||[]; state.equipes=e.data||[];
   const om=Object.fromEntries(state.obras.map(x=>[x.id,x.nome]));
@@ -49,6 +51,11 @@ async function loadCloud(){
   state.equipments=(eq.data||[]).map(x=>({
     id:x.id,descricao:x.descricao,obraId:x.obra_id,equipeId:x.equipe_id,obra:om[x.obra_id]||'',equipe:em[x.equipe_id]||'',
     mensal:Number(x.locacao_mensal||0),diasMes:x.dias_mes||26,diaria:Number(x.locacao_dia||0),ativo:x.ativo
+  }));
+  state.fixedCosts=(fc.data||[]).map(x=>({
+    id:x.id,obraId:x.obra_id,equipeId:x.equipe_id,obra:om[x.obra_id]||'',equipe:em[x.equipe_id]||'',
+    diasMes:Number(x.dias_mes||26),folhaMensal:Number(x.folha_mensal||0),inssMensal:Number(x.inss_mensal||0),
+    fgtsMensal:Number(x.fgts_mensal||0),ativo:x.ativo
   }));
   state.collaborators=(p.data||[]).map(x=>({
     id:x.id,name:x.nome,obraId:x.obra_id,equipeId:x.equipe_id,obra:om[x.obra_id]||'',equipe:em[x.equipe_id]||'',
@@ -78,12 +85,15 @@ function rangeData(start,end){return state.daily.filter(x=>(!start||x.date>=star
 function contractFor(obra,equipe){return state.contracts.find(x=>x.obra===obra&&x.equipe===equipe)}
 function equipDay(obra,equipe){return sum(state.equipments.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe),x=>x.mensal/(x.diasMes||26))}
 function peopleDay(obra,equipe){
+ const f=state.fixedCosts.find(x=>x.ativo!==false&&x.obra===obra&&x.equipe===equipe);
+ if(f){
+   const days=f.diasMes||26;
+   return {folha:f.folhaMensal/days,inss:f.inssMensal/days,fgts:f.fgtsMensal/days,fonte:'mensal'};
+ }
  const c=contractFor(obra,equipe),days=c?.diasMes||26,ps=state.collaborators.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe);
  if(ps.length){
    return {folha:sum(ps,x=>x.salary/days),inss:sum(ps,x=>(x.salary*(x.inss/100))/days),fgts:sum(ps,x=>(x.salary*(x.fgts/100))/days),fonte:'cadastro'};
  }
- // Enquanto a folha por colaborador não estiver cadastrada no app,
- // usa como referência o último custo diário registrado na planilha para essa obra/equipe.
  const hist=[...state.daily].filter(x=>x.obra===obra&&x.equipe===equipe&&(x.folha||x.inss||x.fgts)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||Number(b.id||0)-Number(a.id||0))[0];
  return hist ? {folha:Number(hist.folha||0),inss:Number(hist.inss||0),fgts:Number(hist.fgts||0),fonte:'historico'} : {folha:0,inss:0,fgts:0,fonte:'zero'};
 }
@@ -108,7 +118,8 @@ function refreshLaunchTeams(){
 function fillSelects(){
  const obs=state.obras.filter(x=>x.ativa!==false).map(x=>x.nome),eqs=state.equipes.filter(x=>x.ativa!==false).map(x=>x.nome);
  [lObra,eObra,pObra].forEach(x=>fillSelect(x,obs));
- [eEquipe,pEquipe].forEach(x=>fillSelect(x,eqs));
+ [eEquipe,pEquipe,fEquipe].forEach(x=>fillSelect(x,eqs));
+ fillSelect(fObra,obs);
  if(!lDate.value)lDate.value=isoToday();
  refreshLaunchTeams();
 }
@@ -133,7 +144,7 @@ function previewLaunch(){
    launchPreview.innerHTML='<div class="auto-warning">⚠️ Esta obra/equipe não possui contrato cadastrado.</div>';
    return;
  }
- const fonte=x.folhaFonte==='historico'?'Último custo diário da planilha':(x.folhaFonte==='cadastro'?'Cadastro de colaboradores':'Sem folha cadastrada');
+ const fonte=x.folhaFonte==='mensal'?'Custos mensais ÷ dias/mês':(x.folhaFonte==='historico'?'Último custo diário da planilha':(x.folhaFonte==='cadastro'?'Cadastro de colaboradores':'Sem folha cadastrada'));
  launchPreview.innerHTML=`
  <div class="auto-title">Cálculo automático</div>
  <div class="auto-grid">
@@ -161,16 +172,73 @@ async function saveLaunch(){
  if(Number(lProd.value||0)>0 && Number(lContract.value||0)<=0)return alert('O contrato por unidade está zerado. Confira o cadastro antes de salvar.');
  const x=calcLaunch(),obra=state.obras.find(o=>o.nome===lObra.value),equipe=state.equipes.find(e=>e.nome===lEquipe.value);
  const payload={data:lDate.value,obra_id:obra.id,equipe_id:equipe.id,producao:Number(lProd.value||0),unidade:lUnit.value,contrato_unidade:Number(lContract.value||0),receita:x.receita,folha_bruta_dia:x.folha,inss_dia:x.inss,fgts_dia:x.fgts,iss_dia:x.iss,locacao_equipamentos_dia:x.equipamentos,combustivel:Number(lFuel.value||0),pedagio:Number(lToll.value||0),manutencao:Number(lMaint.value||0),outras_despesas:Number(lOther.value||0),custo_total:x.custo,lucro_prejuizo:x.resultado,margem:x.margem,custo_unidade:x.custoUnidade,alerta:x.resultado<0?'ALERTA: PREJUÍZO':'LUCRO',origem:'app'};
- const {error}=await sb.from('lancamentos_diarios').insert(payload);
+ let q=editingLaunchId ? sb.from('lancamentos_diarios').update(payload).eq('id',editingLaunchId) : sb.from('lancamentos_diarios').insert(payload);
+ const {error}=await q;
  if(error){alert('Erro ao salvar: '+error.message);return}
- await loadCloud();alert('Lançamento salvo na nuvem.');
+ const wasEdit=!!editingLaunchId;
+ cancelLaunchEdit(false);
+ await loadCloud();
+ alert(wasEdit?'Lançamento atualizado na nuvem.':'Lançamento salvo na nuvem.');
 }
-function renderLaunches(){const q=(launchSearch.value||'').toLowerCase(),list=[...state.daily].reverse().filter(x=>(x.obra+' '+x.equipe).toLowerCase().includes(q)).slice(0,100);launchList.innerHTML=list.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra} · ${x.equipe}</b><div class="meta">${x.date.split('-').reverse().join('/')} · ${num(x.producao,3)} ${x.unidade}</div></div><div class="money ${x.resultado>=0?'good':'bad'}">${brl(x.resultado)}</div></div><div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><div><span>Custo</span><b>${brl(x.custo)}</b></div><div><span>Margem</span><b>${num(x.margem*100,1)}%</b></div></div></div>`).join('')}
+function editLaunch(id){
+ const x=state.daily.find(r=>Number(r.id)===Number(id)); if(!x)return;
+ editingLaunchId=x.id;
+ go('launch');
+ lDate.value=x.date;
+ lObra.value=x.obra; refreshLaunchTeams();
+ lEquipe.value=x.equipe; lUnit.value=x.unidade; refreshLaunchDefaults();
+ lProd.value=x.producao;
+ lFuel.value=x.combustivel||0; lToll.value=x.pedagio||0; lMaint.value=x.manutencao||0; lOther.value=x.outras||0;
+ saveLaunchBtn.textContent='Salvar alterações';
+ cancelEditBtn.classList.remove('hidden');
+ previewLaunch();
+ scrollTo(0,0);
+}
+function cancelLaunchEdit(clear=true){
+ editingLaunchId=null;
+ if(window.saveLaunchBtn)saveLaunchBtn.textContent='Salvar lançamento';
+ if(window.cancelEditBtn)cancelEditBtn.classList.add('hidden');
+ if(clear && window.lProd){
+   lProd.value=0;lFuel.value=0;lToll.value=0;lMaint.value=0;lOther.value=0;
+   lDate.value=isoToday();refreshLaunchDefaults();
+ }
+}
+async function deleteLaunch(id){
+ const x=state.daily.find(r=>Number(r.id)===Number(id)); if(!x)return;
+ if(!confirm(`Excluir definitivamente o lançamento de ${x.date.split('-').reverse().join('/')} · ${x.obra} · ${x.equipe}?`))return;
+ const {error}=await sb.from('lancamentos_diarios').delete().eq('id',id);
+ if(error)return alert('Erro ao excluir: '+error.message);
+ if(Number(editingLaunchId)===Number(id))cancelLaunchEdit();
+ await loadCloud();
+ alert('Lançamento excluído.');
+}
+function renderLaunches(){
+ const q=(launchSearch.value||'').toLowerCase(),list=[...state.daily].reverse().filter(x=>(x.obra+' '+x.equipe).toLowerCase().includes(q)).slice(0,100);
+ launchList.innerHTML=list.map(x=>`<div class="list-card launch-card">
+ <div class="head"><div><b>${x.obra} · ${x.equipe}</b><div class="meta">${x.date.split('-').reverse().join('/')} · ${num(x.producao,3)} ${x.unidade}</div></div><div class="money ${x.resultado>=0?'good':'bad'}">${brl(x.resultado)}</div></div>
+ <div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><div><span>Custo total</span><b>${brl(x.custo)}</b></div><div><span>Margem</span><b>${num(x.margem*100,1)}%</b></div><div><span>Custo/unidade</span><b>${brl(x.custoUnidade)}</b></div></div>
+ <details><summary>Ver composição dos custos</summary>
+  <div class="cost-lines">
+   <div><span>Folha bruta/dia</span><b>${brl(x.folha)}</b></div>
+   <div><span>INSS/dia</span><b>${brl(x.inss)}</b></div>
+   <div><span>FGTS/dia</span><b>${brl(x.fgts)}</b></div>
+   <div><span>ISS/dia</span><b>${brl(x.iss)}</b></div>
+   <div><span>Locação equipamentos/dia</span><b>${brl(x.equipamentos)}</b></div>
+   <div><span>Combustível</span><b>${brl(x.combustivel)}</b></div>
+   <div><span>Pedágio</span><b>${brl(x.pedagio)}</b></div>
+   <div><span>Manutenção</span><b>${brl(x.manutencao)}</b></div>
+   <div><span>Outras despesas</span><b>${brl(x.outras)}</b></div>
+  </div>
+ </details>
+ <div class="row-actions"><button onclick="editLaunch(${x.id})">Editar</button><button class="danger" onclick="deleteLaunch(${x.id})">Excluir</button></div>
+ </div>`).join('')
+}
 function regTab(name,btn){document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.regpane').forEach(x=>x.classList.remove('active'));document.getElementById('reg'+name[0].toUpperCase()+name.slice(1)).classList.add('active')}
 function renderRegisters(){
  fillSelects();
  contractList.innerHTML=state.contracts.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe} · ${x.diasMes} dias/mês</div></div><button onclick="delContract(${x.id})">Excluir</button></div><div class="mini-grid"><div><span>R$/t</span><b>${brl(x.contratoTon)}</b></div><div><span>R$/m²</span><b>${brl(x.contratoM2)}</b></div><div><span>ISS</span><b>${num(x.issPct,2)}%</b></div></div></div>`).join('');
  equipmentList.innerHTML=state.equipments.map(x=>`<div class="list-card"><div class="head"><div><b>${x.descricao}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><button onclick="delEquipment(${x.id})">Excluir</button></div><div class="meta">${brl(x.mensal)}/mês · ${brl(x.mensal/(x.diasMes||26))}/dia · ${x.ativo?'Ativo':'Inativo'}</div></div>`).join('');
+ fixedCostList.innerHTML=state.fixedCosts.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra} · ${x.equipe}</b><div class="meta">${x.diasMes} dias/mês</div></div></div><div class="mini-grid"><div><span>Folha mensal</span><b>${brl(x.folhaMensal)}</b></div><div><span>Folha/dia</span><b>${brl(x.folhaMensal/x.diasMes)}</b></div><div><span>INSS mensal</span><b>${brl(x.inssMensal)}</b></div><div><span>INSS/dia</span><b>${brl(x.inssMensal/x.diasMes)}</b></div><div><span>FGTS mensal</span><b>${brl(x.fgtsMensal)}</b></div><div><span>FGTS/dia</span><b>${brl(x.fgtsMensal/x.diasMes)}</b></div></div><button class="small-btn" onclick="loadFixedCost(${x.id})">Editar valores</button></div>`).join('')||'<div class="card">Nenhum custo fixo cadastrado.</div>';
  peopleList.innerHTML=state.collaborators.map(x=>`<div class="list-card"><div class="head"><div><b>${x.name}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><button onclick="delPerson(${x.id})">Excluir</button></div><div class="meta">Salário ${brl(x.salary)} · INSS ${num(x.inss,2)}% · FGTS ${num(x.fgts,2)}%</div></div>`).join('')||'<div class="card">Nenhum colaborador cadastrado ainda.</div>'
 }
 async function addContract(){
@@ -186,6 +254,19 @@ async function addEquipment(){
  const mensal=Number(eMonthly.value||0),dias=Number(eDays.value||26);
  const {error}=await sb.from('equipamentos').insert({descricao:eDesc.value.trim(),obra_id:obra?.id||null,equipe_id:equipe?.id||null,locacao_mensal:mensal,dias_mes:dias,locacao_dia:dias?mensal/dias:0,ativo:true});
  if(error)return alert(error.message);await loadCloud();
+}
+function loadFixedCost(id){
+ const x=state.fixedCosts.find(v=>Number(v.id)===Number(id));if(!x)return;
+ fObra.value=x.obra;fEquipe.value=x.equipe;fDays.value=x.diasMes;fPayroll.value=x.folhaMensal;fInss.value=x.inssMensal;fFgts.value=x.fgtsMensal;
+ scrollTo(0,0);
+}
+async function saveFixedCost(){
+ const obra=state.obras.find(x=>x.nome===fObra.value),equipe=state.equipes.find(x=>x.nome===fEquipe.value);
+ if(!obra||!equipe)return alert('Selecione obra e equipe.');
+ const payload={obra_id:obra.id,equipe_id:equipe.id,dias_mes:Number(fDays.value||26),folha_mensal:Number(fPayroll.value||0),inss_mensal:Number(fInss.value||0),fgts_mensal:Number(fFgts.value||0),ativo:true};
+ const {error}=await sb.from('custos_fixos_equipe').upsert(payload,{onConflict:'obra_id,equipe_id'});
+ if(error)return alert(error.message);
+ await loadCloud();alert('Custos fixos atualizados.');
 }
 async function addPerson(){
  const obra=state.obras.find(x=>x.nome===pObra.value),equipe=state.equipes.find(x=>x.nome===pEquipe.value);

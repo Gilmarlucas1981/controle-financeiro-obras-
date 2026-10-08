@@ -64,7 +64,7 @@
       <label>Outras despesas (R$)<input id="lOther" type="number" step="0.01" value="0"></label>
     </div>
     <div class="preview" id="launchPreview"></div>
-    <button class="primary" onclick="saveLaunch()">Salvar lançamento</button>
+    <div class="launch-actions"><button id="saveLaunchBtn" class="primary" onclick="saveLaunch()">Salvar lançamento</button><button id="cancelEditBtn" class="secondary hidden" onclick="cancelLaunchEdit()">Cancelar edição</button></div>
   </div>
   <input id="launchSearch" class="search" placeholder="Buscar obra/equipe..." oninput="renderLaunches()">
   <div id="launchList"></div>
@@ -75,6 +75,7 @@
   <div class="tabs">
     <button class="active" onclick="regTab('contracts',this)">Obras/Equipes</button>
     <button onclick="regTab('equipment',this)">Equipamentos</button>
+    <button onclick="regTab('costs',this)">Custos fixos</button>
     <button onclick="regTab('people',this)">Colaboradores</button>
   </div>
 
@@ -107,6 +108,24 @@
       <button class="primary" onclick="addEquipment()">Salvar equipamento</button>
     </div>
     <div id="equipmentList"></div>
+  </div>
+
+
+  <div id="regCosts" class="regpane">
+    <div class="card form">
+      <h3>Custos fixos mensais por obra/equipe</h3>
+      <p class="hint">Esses valores são divididos pelos dias do mês e entram automaticamente em cada lançamento diário.</p>
+      <div class="grid2">
+        <label>Obra<select id="fObra"></select></label>
+        <label>Equipe<select id="fEquipe"></select></label>
+        <label>Dias/mês<input id="fDays" type="number" value="26"></label>
+        <label>Folha mensal (R$)<input id="fPayroll" type="number" step="0.01"></label>
+        <label>INSS mensal (R$)<input id="fInss" type="number" step="0.01"></label>
+        <label>FGTS mensal (R$)<input id="fFgts" type="number" step="0.01"></label>
+      </div>
+      <button class="primary" onclick="saveFixedCost()">Salvar custos fixos</button>
+    </div>
+    <div id="fixedCostList"></div>
   </div>
 
   <div id="regPeople" class="regpane">
