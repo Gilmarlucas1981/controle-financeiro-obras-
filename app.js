@@ -4,6 +4,7 @@ let editingLaunchId=null;
 let editingContractId=null;
 let editingEquipmentId=null;
 let editingFixedCostId=null;
+let editingPersonId=null;
 
 const brl=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const num=(v,d=2)=>Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -88,17 +89,40 @@ function rangeData(start,end){return state.daily.filter(x=>(!start||x.date>=star
 function contractFor(obra,equipe){return state.contracts.find(x=>x.obra===obra&&x.equipe===equipe)}
 function equipDay(obra,equipe){return sum(state.equipments.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe),x=>x.mensal/(x.diasMes||26))}
 function peopleDay(obra,equipe){
+ const c=contractFor(obra,equipe),days=c?.diasMes||26;
+ const ps=state.collaborators.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe);
+ if(ps.length){
+   return {
+     folha:sum(ps,x=>x.salary)/days,
+     inss:sum(ps,x=>x.salary*(x.inss/100))/days,
+     fgts:sum(ps,x=>x.salary*(x.fgts/100))/days,
+     fonte:'colaboradores'
+   };
+ }
  const f=state.fixedCosts.find(x=>x.ativo!==false&&x.obra===obra&&x.equipe===equipe);
  if(f){
-   const days=f.diasMes||26;
-   return {folha:f.folhaMensal/days,inss:f.inssMensal/days,fgts:f.fgtsMensal/days,fonte:'mensal'};
- }
- const c=contractFor(obra,equipe),days=c?.diasMes||26,ps=state.collaborators.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe);
- if(ps.length){
-   return {folha:sum(ps,x=>x.salary/days),inss:sum(ps,x=>(x.salary*(x.inss/100))/days),fgts:sum(ps,x=>(x.salary*(x.fgts/100))/days),fonte:'cadastro'};
+   const fd=f.diasMes||days;
+   return {folha:f.folhaMensal/fd,inss:f.inssMensal/fd,fgts:f.fgtsMensal/fd,fonte:'mensal'};
  }
  const hist=[...state.daily].filter(x=>x.obra===obra&&x.equipe===equipe&&(x.folha||x.inss||x.fgts)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||Number(b.id||0)-Number(a.id||0))[0];
  return hist ? {folha:Number(hist.folha||0),inss:Number(hist.inss||0),fgts:Number(hist.fgts||0),fonte:'historico'} : {folha:0,inss:0,fgts:0,fonte:'zero'};
+}
+function teamMonthlyLabor(obra,equipe){
+ const c=contractFor(obra,equipe),days=c?.diasMes||26;
+ const ps=state.collaborators.filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe);
+ if(ps.length){
+   return {
+     source:'colaboradores',
+     count:ps.length,
+     days,
+     folha:sum(ps,x=>x.salary),
+     inss:sum(ps,x=>x.salary*(x.inss/100)),
+     fgts:sum(ps,x=>x.salary*(x.fgts/100))
+   };
+ }
+ const f=state.fixedCosts.find(x=>x.ativo!==false&&x.obra===obra&&x.equipe===equipe);
+ if(f)return {source:'manual',count:0,days:f.diasMes||days,folha:f.folhaMensal,inss:f.inssMensal,fgts:f.fgtsMensal};
+ return {source:'zero',count:0,days,folha:0,inss:0,fgts:0};
 }
 function renderDashboard(){
  const s=filterStart.value||monthStart(),e=filterEnd.value||isoToday();filterStart.value=s;filterEnd.value=e;
@@ -139,6 +163,7 @@ function refreshPeopleTeams(){
  const cur=pEquipe.value;
  fillSelect(pEquipe,valid);
  if(valid.includes(cur))pEquipe.value=cur;
+ previewPersonCost();
 }
 function refreshFixedCostTeams(load=true){
  const valid=validTeamsForObra(fObra.value);
@@ -175,6 +200,17 @@ function previewFixedDaily(){
  <span>FGTS/dia <strong>${brl(dias?fgts/dias:0)}</strong></span>
  </div>`;
 }
+
+function previewPersonCost(){
+ if(!window.personCostPreview)return;
+ const sal=Number(pSalary.value||0),inss=Number(pInss.value||0),fgts=Number(pFgts.value||0);
+ personCostPreview.innerHTML=`<b>Custo mensal deste colaborador</b><div class="daily-preview-grid">
+ <span>Salário <strong>${brl(sal)}</strong></span>
+ <span>INSS <strong>${brl(sal*inss/100)}</strong></span>
+ <span>FGTS <strong>${brl(sal*fgts/100)}</strong></span>
+ <span>Total + encargos <strong>${brl(sal+(sal*inss/100)+(sal*fgts/100))}</strong></span>
+ </div>`;
+}
 function refreshLaunchDefaults(){
  const c=contractFor(lObra.value,lEquipe.value);
  const v=lUnit.value==='m²'?(c?.contratoM2||0):(c?.contratoTon||0);
@@ -185,6 +221,7 @@ document.addEventListener('input',e=>{
  if(['lProd','lContract','lFuel','lToll','lMaint','lOther'].includes(e.target.id))previewLaunch();
  if(['eMonthly','eDays'].includes(e.target.id))previewEquipmentDaily();
  if(['fDays','fPayroll','fInss','fFgts'].includes(e.target.id))previewFixedDaily();
+ if(['pSalary','pInss','pFgts'].includes(e.target.id))previewPersonCost();
 })
 function calcLaunch(){
  const obra=lObra.value,equipe=lEquipe.value,prod=Number(lProd.value||0),contr=Number(lContract.value||0),receita=prod*contr;
@@ -200,7 +237,7 @@ function previewLaunch(){
    launchPreview.innerHTML='<div class="auto-warning">⚠️ Esta obra/equipe não possui contrato cadastrado.</div>';
    return;
  }
- const fonte=x.folhaFonte==='mensal'?'Custos mensais ÷ dias/mês':(x.folhaFonte==='historico'?'Último custo diário da planilha':(x.folhaFonte==='cadastro'?'Cadastro de colaboradores':'Sem folha cadastrada'));
+ const fonte=x.folhaFonte==='colaboradores'?'Soma dos colaboradores ativos ÷ dias/mês':(x.folhaFonte==='mensal'?'Custos fixos mensais ÷ dias/mês':(x.folhaFonte==='historico'?'Último custo diário da planilha':'Sem folha cadastrada'));
  launchPreview.innerHTML=`
  <div class="auto-title">Cálculo automático</div>
  <div class="auto-grid">
@@ -294,8 +331,18 @@ function renderRegisters(){
  fillSelects();
  contractList.innerHTML=state.contracts.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe} · ${x.diasMes} dias/mês</div></div><div class="row-actions compact"><button onclick="editContract(${x.id})">Editar</button><button class="danger" onclick="delContract(${x.id})">Excluir</button></div></div><div class="mini-grid"><div><span>R$/t</span><b>${brl(x.contratoTon)}</b></div><div><span>R$/m²</span><b>${brl(x.contratoM2)}</b></div><div><span>ISS</span><b>${num(x.issPct,2)}%</b></div></div></div>`).join('');
  equipmentList.innerHTML=state.equipments.map(x=>`<div class="list-card"><div class="head"><div><b>${x.descricao}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><span class="status-pill ${x.ativo?'on':'off'}">${x.ativo?'Ativo':'Inativo'}</span></div><div class="mini-grid"><div><span>Mensal</span><b>${brl(x.mensal)}</b></div><div><span>Por dia</span><b>${brl(x.mensal/(x.diasMes||26))}</b></div><div><span>Dias/mês</span><b>${x.diasMes}</b></div></div><div class="row-actions compact"><button onclick="editEquipment(${x.id})">Editar</button><button onclick="toggleEquipment(${x.id},${!x.ativo})">${x.ativo?'Desativar':'Ativar'}</button><button class="danger" onclick="delEquipment(${x.id})">Excluir</button></div></div>`).join('');
- fixedCostList.innerHTML=state.fixedCosts.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra} · ${x.equipe}</b><div class="meta">${x.diasMes} dias/mês</div></div></div><div class="mini-grid"><div><span>Folha mensal</span><b>${brl(x.folhaMensal)}</b></div><div><span>Folha/dia</span><b>${brl(x.folhaMensal/x.diasMes)}</b></div><div><span>INSS mensal</span><b>${brl(x.inssMensal)}</b></div><div><span>INSS/dia</span><b>${brl(x.inssMensal/x.diasMes)}</b></div><div><span>FGTS mensal</span><b>${brl(x.fgtsMensal)}</b></div><div><span>FGTS/dia</span><b>${brl(x.fgtsMensal/x.diasMes)}</b></div></div><button class="small-btn" onclick="loadFixedCost(${x.id})">Editar valores</button></div>`).join('')||'<div class="card">Nenhum custo fixo cadastrado.</div>';
- peopleList.innerHTML=state.collaborators.map(x=>`<div class="list-card"><div class="head"><div><b>${x.name}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><button onclick="delPerson(${x.id})">Excluir</button></div><div class="meta">Salário ${brl(x.salary)} · INSS ${num(x.inss,2)}% · FGTS ${num(x.fgts,2)}%</div></div>`).join('')||'<div class="card">Nenhum colaborador cadastrado ainda.</div>';
+ const combos=[...new Map(state.contracts.map(c=>[c.obra+'|'+c.equipe,{obra:c.obra,equipe:c.equipe}])).values()];
+ fixedCostList.innerHTML=combos.map(c=>{
+   const t=teamMonthlyLabor(c.obra,c.equipe);
+   const manual=state.fixedCosts.find(x=>x.obra===c.obra&&x.equipe===c.equipe);
+   const source=t.source==='colaboradores'?`${t.count} colaborador(es) ativo(s)`:(t.source==='manual'?'Valor manual':'Sem cadastro');
+   return `<div class="list-card"><div class="head"><div><b>${c.obra} · ${c.equipe}</b><div class="meta">${t.days} dias/mês · ${source}</div></div></div><div class="mini-grid"><div><span>Folha mensal</span><b>${brl(t.folha)}</b></div><div><span>Folha/dia</span><b>${brl(t.days?t.folha/t.days:0)}</b></div><div><span>INSS mensal</span><b>${brl(t.inss)}</b></div><div><span>INSS/dia</span><b>${brl(t.days?t.inss/t.days:0)}</b></div><div><span>FGTS mensal</span><b>${brl(t.fgts)}</b></div><div><span>FGTS/dia</span><b>${brl(t.days?t.fgts/t.days:0)}</b></div></div>${t.source==='colaboradores'?'<div class="derived-note">Calculado automaticamente pelos colaboradores ativos.</div>':`<button class="small-btn" onclick="${manual?`loadFixedCost(${manual.id})`:`prepareFixedCost('${c.obra.replaceAll("'","\'")}','${c.equipe.replaceAll("'","\'")}')`}">Editar valores</button>`}</div>`;
+ }).join('')||'<div class="card">Nenhum contrato cadastrado.</div>';
+ peopleList.innerHTML=state.collaborators.map(x=>{
+   const inssV=x.salary*x.inss/100,fgtsV=x.salary*x.fgts/100;
+   return `<div class="list-card"><div class="head"><div><b>${x.name}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><span class="status-pill ${x.ativo?'on':'off'}">${x.ativo?'Ativo':'Inativo'}</span></div><div class="mini-grid"><div><span>Salário</span><b>${brl(x.salary)}</b></div><div><span>INSS</span><b>${brl(inssV)}</b></div><div><span>FGTS</span><b>${brl(fgtsV)}</b></div><div><span>Total + encargos</span><b>${brl(x.salary+inssV+fgtsV)}</b></div></div><div class="row-actions compact"><button onclick="editPerson(${x.id})">Editar</button><button onclick="togglePerson(${x.id},${!x.ativo})">${x.ativo?'Desativar':'Ativar'}</button><button class="danger" onclick="delPerson(${x.id})">Excluir</button></div></div>`;
+ }).join('')||'<div class="card">Nenhum colaborador cadastrado ainda.</div>';
+ previewPersonCost();
  previewEquipmentDaily();
  loadFixedCostByCombo();
 }
@@ -341,6 +388,11 @@ function cancelEquipmentEdit(clear=true){
 async function toggleEquipment(id,value){
  const {error}=await sb.from('equipamentos').update({ativo:value}).eq('id',id);if(error)return alert(error.message);await loadCloud();
 }
+function prepareFixedCost(obra,equipe){
+ fObra.value=obra;refreshFixedCostTeams(false);fEquipe.value=equipe;editingFixedCostId=null;
+ fDays.value=contractFor(obra,equipe)?.diasMes||26;fPayroll.value=0;fInss.value=0;fFgts.value=0;
+ fixedSaveBtn.textContent='Salvar custos fixos';fixedCancelBtn.classList.add('hidden');previewFixedDaily();scrollTo(0,0);
+}
 function loadFixedCost(id){
  const x=state.fixedCosts.find(v=>Number(v.id)===Number(id));if(!x)return;
  editingFixedCostId=x.id;fObra.value=x.obra;refreshFixedCostTeams(false);fEquipe.value=x.equipe;fDays.value=x.diasMes;fPayroll.value=x.folhaMensal;fInss.value=x.inssMensal;fFgts.value=x.fgtsMensal;
@@ -361,8 +413,31 @@ async function saveFixedCost(){
 }
 async function addPerson(){
  const obra=state.obras.find(x=>x.nome===pObra.value),equipe=state.equipes.find(x=>x.nome===pEquipe.value);
- const {error}=await sb.from('colaboradores').insert({nome:pName.value.trim(),obra_id:obra?.id||null,equipe_id:equipe?.id||null,salario_mensal:Number(pSalary.value||0),inss_pct:Number(pInss.value||0),fgts_pct:Number(pFgts.value||0),ativo:true});
- if(error)return alert(error.message);await loadCloud();
+ if(!pName.value.trim())return alert('Informe o nome do colaborador.');
+ if(!obra||!equipe)return alert('Selecione obra e equipe.');
+ const payload={nome:pName.value.trim(),obra_id:obra.id,equipe_id:equipe.id,salario_mensal:Number(pSalary.value||0),inss_pct:Number(pInss.value||0),fgts_pct:Number(pFgts.value||0),ativo:true};
+ let q=editingPersonId?sb.from('colaboradores').update(payload).eq('id',editingPersonId):sb.from('colaboradores').insert(payload);
+ const {error}=await q;
+ if(error)return alert(error.message);
+ cancelPersonEdit(false);await loadCloud();alert('Colaborador salvo.');
+}
+function editPerson(id){
+ const x=state.collaborators.find(v=>Number(v.id)===Number(id));if(!x)return;
+ editingPersonId=x.id;pName.value=x.name;pObra.value=x.obra;refreshPeopleTeams();pEquipe.value=x.equipe;pSalary.value=x.salary;pInss.value=x.inss;pFgts.value=x.fgts;
+ personFormTitle.textContent='Editar colaborador';personSaveBtn.textContent='Salvar alterações';personCancelBtn.classList.remove('hidden');previewPersonCost();scrollTo(0,0);
+}
+function cancelPersonEdit(clear=true){
+ editingPersonId=null;personFormTitle.textContent='Novo colaborador';personSaveBtn.textContent='Salvar colaborador';personCancelBtn.classList.add('hidden');
+ if(clear){pName.value='';pSalary.value=0;pInss.value=0;pFgts.value=8} previewPersonCost();
+}
+async function togglePerson(id,value){
+ const {error}=await sb.from('colaboradores').update({ativo:value}).eq('id',id);if(error)return alert(error.message);await loadCloud();
+}
+async function delPerson(id){
+ const x=state.collaborators.find(v=>Number(v.id)===Number(id));
+ if(!confirm(`Excluir o colaborador ${x?.name||''}?`))return;
+ if(Number(editingPersonId)===Number(id))cancelPersonEdit();
+ const {error}=await sb.from('colaboradores').delete().eq('id',id);if(error)return alert(error.message);await loadCloud();
 }
 async function delContract(id){if(!confirm('Excluir contrato?'))return;if(Number(editingContractId)===Number(id))cancelContractEdit();const {error}=await sb.from('contratos_obra_equipe').delete().eq('id',id);if(error)return alert(error.message);await loadCloud()}
 async function delEquipment(id){if(!confirm('Excluir equipamento?'))return;if(Number(editingEquipmentId)===Number(id))cancelEquipmentEdit();const {error}=await sb.from('equipamentos').delete().eq('id',id);if(error)return alert(error.message);await loadCloud()}

@@ -34,3 +34,5 @@
 .status-pill{font-size:11px;font-weight:800;padding:5px 8px;border-radius:999px}.status-pill.on{background:#ecfdf5;color:#15803d}.status-pill.off{background:#f3f4f6;color:#6b7280}
 
 select:disabled{background:#f3f4f6;color:#6b7280}
+
+.derived-note{margin-top:10px;padding:9px 10px;border-radius:10px;background:#ecfdf5;color:#166534;font-size:12px;font-weight:800}
