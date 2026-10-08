@@ -100,8 +100,8 @@
       <h3>Novo equipamento</h3>
       <div class="grid2">
         <label>Descrição<input id="eDesc"></label>
-        <label>Obra<select id="eObra"></select></label>
-        <label>Equipe<select id="eEquipe"></select></label>
+        <label>Obra<select id="eObra" onchange="refreshEquipmentTeams()"></select></label>
+        <label>Equipe<select id="eEquipe" onchange="previewEquipmentDaily()"></select></label>
         <label>Locação mensal (R$)<input id="eMonthly" type="number" step="0.01"></label>
         <label>Dias/mês<input id="eDays" type="number" value="26"></label>
       </div>
@@ -114,10 +114,10 @@
   <div id="regCosts" class="regpane">
     <div class="card form">
       <h3>Custos fixos mensais por obra/equipe</h3>
-      <p class="hint">Esses valores são divididos pelos dias do mês e entram automaticamente em cada lançamento diário.</p>
+      <p class="hint">Escolha a obra e a equipe. Se já houver cadastro, os valores mensais serão carregados automaticamente. Eles são divididos pelos dias do mês e entram em cada lançamento diário.</p>
       <div class="grid2">
-        <label>Obra<select id="fObra"></select></label>
-        <label>Equipe<select id="fEquipe"></select></label>
+        <label>Obra<select id="fObra" onchange="refreshFixedCostTeams()"></select></label>
+        <label>Equipe<select id="fEquipe" onchange="loadFixedCostByCombo()"></select></label>
         <label>Dias/mês<input id="fDays" type="number" value="26"></label>
         <label>Folha mensal (R$)<input id="fPayroll" type="number" step="0.01"></label>
         <label>INSS mensal (R$)<input id="fInss" type="number" step="0.01"></label>
@@ -133,7 +133,7 @@
       <h3>Novo colaborador</h3>
       <div class="grid2">
         <label>Nome<input id="pName"></label>
-        <label>Obra<select id="pObra"></select></label>
+        <label>Obra<select id="pObra" onchange="refreshPeopleTeams()"></select></label>
         <label>Equipe<select id="pEquipe"></select></label>
         <label>Salário mensal (R$)<input id="pSalary" type="number" step="0.01"></label>
         <label>INSS (%)<input id="pInss" type="number" step="0.01" value="0"></label>

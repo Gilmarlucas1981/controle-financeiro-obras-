@@ -32,3 +32,5 @@
 .daily-preview-grid span{display:flex;justify-content:space-between;gap:10px}.daily-preview-grid strong{color:#111827}
 .row-actions.compact{margin-top:0;flex-wrap:wrap}.row-actions.compact button{padding:7px 9px;font-size:12px}
 .status-pill{font-size:11px;font-weight:800;padding:5px 8px;border-radius:999px}.status-pill.on{background:#ecfdf5;color:#15803d}.status-pill.off{background:#f3f4f6;color:#6b7280}
+
+select:disabled{background:#f3f4f6;color:#6b7280}

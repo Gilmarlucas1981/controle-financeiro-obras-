@@ -119,12 +119,45 @@ function refreshLaunchTeams(){
  refreshLaunchDefaults();
 }
 function fillSelects(){
- const obs=state.obras.filter(x=>x.ativa!==false).map(x=>x.nome),eqs=state.equipes.filter(x=>x.ativa!==false).map(x=>x.nome);
- [lObra,eObra,pObra].forEach(x=>fillSelect(x,obs));
- [eEquipe,pEquipe,fEquipe].forEach(x=>fillSelect(x,eqs));
- fillSelect(fObra,obs);
+ const obs=state.obras.filter(x=>x.ativa!==false).map(x=>x.nome);
+ [lObra,eObra,pObra,fObra].forEach(x=>fillSelect(x,obs));
  if(!lDate.value)lDate.value=isoToday();
  refreshLaunchTeams();
+ refreshEquipmentTeams();
+ refreshFixedCostTeams(false);
+ refreshPeopleTeams();
+}
+function refreshEquipmentTeams(){
+ const valid=validTeamsForObra(eObra.value);
+ const cur=eEquipe.value;
+ fillSelect(eEquipe,valid);
+ if(valid.includes(cur))eEquipe.value=cur;
+ previewEquipmentDaily();
+}
+function refreshPeopleTeams(){
+ const valid=validTeamsForObra(pObra.value);
+ const cur=pEquipe.value;
+ fillSelect(pEquipe,valid);
+ if(valid.includes(cur))pEquipe.value=cur;
+}
+function refreshFixedCostTeams(load=true){
+ const valid=validTeamsForObra(fObra.value);
+ const cur=fEquipe.value;
+ fillSelect(fEquipe,valid);
+ if(valid.includes(cur))fEquipe.value=cur;
+ if(load)loadFixedCostByCombo();
+}
+function loadFixedCostByCombo(){
+ if(!window.fObra||!window.fEquipe)return;
+ const x=state.fixedCosts.find(v=>v.obra===fObra.value&&v.equipe===fEquipe.value);
+ editingFixedCostId=x?.id||null;
+ fDays.value=x?.diasMes||contractFor(fObra.value,fEquipe.value)?.diasMes||26;
+ fPayroll.value=x?.folhaMensal||0;
+ fInss.value=x?.inssMensal||0;
+ fFgts.value=x?.fgtsMensal||0;
+ fixedSaveBtn.textContent=x?'Salvar alterações':'Salvar custos fixos';
+ fixedCancelBtn.classList.toggle('hidden',!x);
+ previewFixedDaily();
 }
 
 function previewEquipmentDaily(){
@@ -264,7 +297,7 @@ function renderRegisters(){
  fixedCostList.innerHTML=state.fixedCosts.map(x=>`<div class="list-card"><div class="head"><div><b>${x.obra} · ${x.equipe}</b><div class="meta">${x.diasMes} dias/mês</div></div></div><div class="mini-grid"><div><span>Folha mensal</span><b>${brl(x.folhaMensal)}</b></div><div><span>Folha/dia</span><b>${brl(x.folhaMensal/x.diasMes)}</b></div><div><span>INSS mensal</span><b>${brl(x.inssMensal)}</b></div><div><span>INSS/dia</span><b>${brl(x.inssMensal/x.diasMes)}</b></div><div><span>FGTS mensal</span><b>${brl(x.fgtsMensal)}</b></div><div><span>FGTS/dia</span><b>${brl(x.fgtsMensal/x.diasMes)}</b></div></div><button class="small-btn" onclick="loadFixedCost(${x.id})">Editar valores</button></div>`).join('')||'<div class="card">Nenhum custo fixo cadastrado.</div>';
  peopleList.innerHTML=state.collaborators.map(x=>`<div class="list-card"><div class="head"><div><b>${x.name}</b><div class="meta">${x.obra} · ${x.equipe}</div></div><button onclick="delPerson(${x.id})">Excluir</button></div><div class="meta">Salário ${brl(x.salary)} · INSS ${num(x.inss,2)}% · FGTS ${num(x.fgts,2)}%</div></div>`).join('')||'<div class="card">Nenhum colaborador cadastrado ainda.</div>';
  previewEquipmentDaily();
- previewFixedDaily();
+ loadFixedCostByCombo();
 }
 async function addContract(){
  let obra=state.obras.find(x=>x.nome===cObra.value.trim()),equipe=state.equipes.find(x=>x.nome===cEquipe.value.trim());
@@ -298,7 +331,7 @@ async function addEquipment(){
 }
 function editEquipment(id){
  const x=state.equipments.find(v=>Number(v.id)===Number(id));if(!x)return;
- editingEquipmentId=x.id;eDesc.value=x.descricao;eObra.value=x.obra;eEquipe.value=x.equipe;eMonthly.value=x.mensal;eDays.value=x.diasMes;
+ editingEquipmentId=x.id;eDesc.value=x.descricao;eObra.value=x.obra;refreshEquipmentTeams();eEquipe.value=x.equipe;eMonthly.value=x.mensal;eDays.value=x.diasMes;
  equipmentFormTitle.textContent='Editar equipamento';equipmentSaveBtn.textContent='Salvar alterações';equipmentCancelBtn.classList.remove('hidden');previewEquipmentDaily();scrollTo(0,0);
 }
 function cancelEquipmentEdit(clear=true){
@@ -310,7 +343,7 @@ async function toggleEquipment(id,value){
 }
 function loadFixedCost(id){
  const x=state.fixedCosts.find(v=>Number(v.id)===Number(id));if(!x)return;
- editingFixedCostId=x.id;fObra.value=x.obra;fEquipe.value=x.equipe;fDays.value=x.diasMes;fPayroll.value=x.folhaMensal;fInss.value=x.inssMensal;fFgts.value=x.fgtsMensal;
+ editingFixedCostId=x.id;fObra.value=x.obra;refreshFixedCostTeams(false);fEquipe.value=x.equipe;fDays.value=x.diasMes;fPayroll.value=x.folhaMensal;fInss.value=x.inssMensal;fFgts.value=x.fgtsMensal;
  fixedSaveBtn.textContent='Salvar alterações';fixedCancelBtn.classList.remove('hidden');previewFixedDaily();scrollTo(0,0);
 }
 function cancelFixedCostEdit(clear=true){
