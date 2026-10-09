@@ -378,12 +378,37 @@ async function addEquipment(){
 }
 function editEquipment(id){
  const x=state.equipments.find(v=>Number(v.id)===Number(id));if(!x)return;
- editingEquipmentId=x.id;eDesc.value=x.descricao;eObra.value=x.obra;refreshEquipmentTeams();eEquipe.value=x.equipe;eMonthly.value=x.mensal;eDays.value=x.diasMes;
- equipmentFormTitle.textContent='Editar equipamento';equipmentSaveBtn.textContent='Salvar alterações';equipmentCancelBtn.classList.remove('hidden');previewEquipmentDaily();scrollTo(0,0);
+ editingEquipmentId=x.id;
+ eDesc.value=x.descricao||'';
+ eObra.value=x.obra||'';
+ refreshEquipmentTeams();
+ eEquipe.value=x.equipe||'';
+ eMonthly.value=Number(x.mensal||0);
+ eDays.value=Number(x.diasMes||26);
+ const title=document.getElementById('equipmentFormTitle');
+ const saveBtn=document.getElementById('equipmentSaveBtn');
+ const cancelBtn=document.getElementById('equipmentCancelBtn');
+ if(title)title.textContent='Editar equipamento';
+ if(saveBtn)saveBtn.textContent='Salvar alterações';
+ if(cancelBtn)cancelBtn.classList.remove('hidden');
+ previewEquipmentDaily();
+ const card=document.getElementById('equipmentFormCard');
+ if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function cancelEquipmentEdit(clear=true){
- editingEquipmentId=null;equipmentFormTitle.textContent='Equipamento';equipmentSaveBtn.textContent='Salvar equipamento';equipmentCancelBtn.classList.add('hidden');
- if(clear){eDesc.value='';eMonthly.value=0;eDays.value=26} previewEquipmentDaily();
+ editingEquipmentId=null;
+ const title=document.getElementById('equipmentFormTitle');
+ const saveBtn=document.getElementById('equipmentSaveBtn');
+ const cancelBtn=document.getElementById('equipmentCancelBtn');
+ if(title)title.textContent='Novo equipamento';
+ if(saveBtn)saveBtn.textContent='Salvar equipamento';
+ if(cancelBtn)cancelBtn.classList.add('hidden');
+ if(clear){
+   eDesc.value='';
+   eMonthly.value=0;
+   eDays.value=26;
+ }
+ previewEquipmentDaily();
 }
 async function toggleEquipment(id,value){
  const {error}=await sb.from('equipamentos').update({ativo:value}).eq('id',id);if(error)return alert(error.message);await loadCloud();
