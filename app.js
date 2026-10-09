@@ -359,12 +359,40 @@ async function addContract(){
 }
 function editContract(id){
  const x=state.contracts.find(v=>Number(v.id)===Number(id));if(!x)return;
- editingContractId=x.id;cObra.value=x.obra;cEquipe.value=x.equipe;cDias.value=x.diasMes;cIss.value=x.issPct;cTon.value=x.contratoTon;cM2.value=x.contratoM2;
- contractFormTitle.textContent='Editar contrato';contractSaveBtn.textContent='Salvar alterações';contractCancelBtn.classList.remove('hidden');scrollTo(0,0);
+ editingContractId=x.id;
+ cObra.value=x.obra||'';
+ cEquipe.value=x.equipe||'';
+ cDias.value=Number(x.diasMes||26);
+ cIss.value=Number(x.issPct||0);
+ cTon.value=Number(x.contratoTon||0);
+ cM2.value=Number(x.contratoM2||0);
+
+ const title=document.getElementById('contractFormTitle');
+ const saveBtn=document.getElementById('contractSaveBtn');
+ const cancelBtn=document.getElementById('contractCancelBtn');
+ if(title)title.textContent='Editar contrato';
+ if(saveBtn)saveBtn.textContent='Salvar alterações';
+ if(cancelBtn)cancelBtn.classList.remove('hidden');
+
+ const card=document.getElementById('contractFormCard');
+ if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function cancelContractEdit(clear=true){
- editingContractId=null;contractFormTitle.textContent='Obra, equipe e contrato';contractSaveBtn.textContent='Salvar contrato';contractCancelBtn.classList.add('hidden');
- if(clear){cObra.value='';cEquipe.value='';cDias.value=26;cIss.value=0;cTon.value=0;cM2.value=0}
+ editingContractId=null;
+ const title=document.getElementById('contractFormTitle');
+ const saveBtn=document.getElementById('contractSaveBtn');
+ const cancelBtn=document.getElementById('contractCancelBtn');
+ if(title)title.textContent='Novo contrato';
+ if(saveBtn)saveBtn.textContent='Salvar contrato';
+ if(cancelBtn)cancelBtn.classList.add('hidden');
+ if(clear){
+   cObra.value='';
+   cEquipe.value='';
+   cDias.value=26;
+   cIss.value=0;
+   cTon.value=0;
+   cM2.value=0;
+ }
 }
 async function addEquipment(){
  const obra=state.obras.find(x=>x.nome===eObra.value),equipe=state.equipes.find(x=>x.nome===eEquipe.value);
