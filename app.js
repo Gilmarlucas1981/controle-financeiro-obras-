@@ -124,12 +124,68 @@ function teamMonthlyLabor(obra,equipe){
  if(f)return {source:'manual',count:0,days:f.diasMes||days,folha:f.folhaMensal,inss:f.inssMensal,fgts:f.fgtsMensal};
  return {source:'zero',count:0,days,folha:0,inss:0,fgts:0};
 }
+
+function equipmentRowsFor(obra,equipe){
+  return state.equipments
+    .filter(x=>x.ativo&&x.obra===obra&&x.equipe===equipe)
+    .map(x=>({
+      descricao:x.descricao,
+      mensal:Number(x.mensal||0),
+      dias:Number(x.diasMes||26),
+      diaria:Number(x.mensal||0)/(Number(x.diasMes||26)||26)
+    }));
+}
+function equipmentDetailHtml(obra,equipe){
+  const rows=equipmentRowsFor(obra,equipe);
+  const totalMensal=sum(rows,x=>x.mensal),totalDia=sum(rows,x=>x.diaria);
+  return `
+    <div class="detail-summary">
+      <div><span>Total mensal</span><b>${brl(totalMensal)}</b></div>
+      <div><span>Total por dia</span><b>${brl(totalDia)}</b></div>
+      <div><span>Equipamentos ativos</span><b>${rows.length}</b></div>
+    </div>
+    <div class="equipment-detail-list">
+      ${rows.map(x=>`<div class="equipment-detail-row">
+        <div><b>${x.descricao}</b><small>${x.dias} dias/mês</small></div>
+        <div class="right"><span>${brl(x.mensal)}/mês</span><b>${brl(x.diaria)}/dia</b></div>
+      </div>`).join('')||'<div class="empty-detail">Nenhum equipamento ativo nesta equipe.</div>'}
+    </div>`;
+}
+function openEquipmentDetail(obra,equipe){
+  document.getElementById('costModalTitle').textContent=`Equipamentos · ${obra} · ${equipe}`;
+  document.getElementById('costModalBody').innerHTML=equipmentDetailHtml(obra,equipe);
+  document.getElementById('costModal').classList.remove('hidden');
+}
+function openTeamCostDetail(obra,equipe,start,end){
+  const d=state.daily.filter(x=>x.obra===obra&&x.equipe===equipe&&(!start||x.date>=start)&&(!end||x.date<=end));
+  const folha=sum(d,x=>x.folha),inss=sum(d,x=>x.inss),fgts=sum(d,x=>x.fgts),iss=sum(d,x=>x.iss),
+        equip=sum(d,x=>x.equipamentos),fuel=sum(d,x=>x.combustivel),toll=sum(d,x=>x.pedagio),
+        maint=sum(d,x=>x.manutencao),other=sum(d,x=>x.outras),cost=sum(d,x=>x.custo);
+  document.getElementById('costModalTitle').textContent=`Custos · ${obra} · ${equipe}`;
+  document.getElementById('costModalBody').innerHTML=`
+    <div class="period-detail">${start?.split('-').reverse().join('/')||''} até ${end?.split('-').reverse().join('/')||''}</div>
+    <div class="cost-breakdown-list">
+      <div><span>Folha bruta</span><b>${brl(folha)}</b></div>
+      <div><span>INSS</span><b>${brl(inss)}</b></div>
+      <div><span>FGTS</span><b>${brl(fgts)}</b></div>
+      <div><span>ISS</span><b>${brl(iss)}</b></div>
+      <button class="cost-drill" onclick="openEquipmentDetail('${obra.replaceAll("'","\\'")}','${equipe.replaceAll("'","\\'")}')"><span>Locação de equipamentos</span><b>${brl(equip)} ›</b></button>
+      <div><span>Combustível</span><b>${brl(fuel)}</b></div>
+      <div><span>Pedágio</span><b>${brl(toll)}</b></div>
+      <div><span>Manutenção</span><b>${brl(maint)}</b></div>
+      <div><span>Outras despesas</span><b>${brl(other)}</b></div>
+      <div class="cost-total"><span>CUSTO TOTAL</span><b>${brl(cost)}</b></div>
+    </div>`;
+  document.getElementById('costModal').classList.remove('hidden');
+}
+function closeCostModal(){document.getElementById('costModal').classList.add('hidden')}
+
 function renderDashboard(){
  const s=filterStart.value||monthStart(),e=filterEnd.value||isoToday();filterStart.value=s;filterEnd.value=e;
  const data=rangeData(s,e),receita=sum(data,x=>x.receita),custo=sum(data,x=>x.custo),res=receita-custo,margem=receita?res/receita:0;
  kpis.innerHTML=`<div class="kpi"><span>Receita</span><b>${brl(receita)}</b></div><div class="kpi"><span>Custos</span><b>${brl(custo)}</b></div><div class="kpi ${res>=0?'good':'bad'}"><span>Resultado</span><b>${brl(res)}</b></div><div class="kpi ${margem>=0?'good':'bad'}"><span>Margem</span><b>${num(margem*100,1)}%</b></div>`;
  const map={};data.forEach(x=>{const k=x.obra+'|'+x.equipe;if(!map[k])map[k]={obra:x.obra,equipe:x.equipe,prodT:0,prodM2:0,receita:0,custo:0};const m=map[k];if(x.unidade==='m²')m.prodM2+=x.producao;else m.prodT+=x.producao;m.receita+=x.receita;m.custo+=x.custo});
- summaryList.innerHTML=Object.values(map).sort((a,b)=>(b.receita-b.custo)-(a.receita-a.custo)).map(x=>{const r=x.receita-x.custo,mg=x.receita?r/x.receita:0;return `<div class="summary-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe}</div></div><div class="money ${r>=0?'good':'bad'}">${brl(r)}</div></div><div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><div><span>Custo</span><b>${brl(x.custo)}</b></div><div><span>Margem</span><b>${num(mg*100,1)}%</b></div><div><span>Produção t</span><b>${num(x.prodT,2)}</b></div><div><span>Produção m²</span><b>${num(x.prodM2,2)}</b></div></div></div>`}).join('')||'<div class="card">Sem lançamentos no período.</div>'
+ summaryList.innerHTML=Object.values(map).sort((a,b)=>(b.receita-b.custo)-(a.receita-a.custo)).map(x=>{const r=x.receita-x.custo,mg=x.receita?r/x.receita:0;return `<div class="summary-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe}</div></div><div class="money ${r>=0?'good':'bad'}">${brl(r)}</div></div><div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><button class="mini-drill" onclick="openTeamCostDetail('${x.obra.replaceAll("'","\'")}','${x.equipe.replaceAll("'","\'")}','${s}','${e}')"><span>Custo</span><b>${brl(x.custo)} ›</b></button><div><span>Margem</span><b>${num(mg*100,1)}%</b></div><div><span>Produção t</span><b>${num(x.prodT,2)}</b></div><div><span>Produção m²</span><b>${num(x.prodM2,2)}</b></div></div></div>`}).join('')||'<div class="card">Sem lançamentos no período.</div>'
 }
 function fillSelect(el,values){const cur=el.value;el.innerHTML=values.map(x=>`<option>${x}</option>`).join('');if(values.includes(cur))el.value=cur}
 function validTeamsForObra(obra){
@@ -316,7 +372,7 @@ function renderLaunches(){
    <div><span>INSS/dia</span><b>${brl(x.inss)}</b></div>
    <div><span>FGTS/dia</span><b>${brl(x.fgts)}</b></div>
    <div><span>ISS/dia</span><b>${brl(x.iss)}</b></div>
-   <div><span>Locação equipamentos/dia</span><b>${brl(x.equipamentos)}</b></div>
+   <button class="cost-line-drill" onclick="openEquipmentDetail('${x.obra.replaceAll("'","\'")}','${x.equipe.replaceAll("'","\'")}')"><span>Locação equipamentos/dia</span><b>${brl(x.equipamentos)} ›</b></button>
    <div><span>Combustível</span><b>${brl(x.combustivel)}</b></div>
    <div><span>Pedágio</span><b>${brl(x.pedagio)}</b></div>
    <div><span>Manutenção</span><b>${brl(x.manutencao)}</b></div>

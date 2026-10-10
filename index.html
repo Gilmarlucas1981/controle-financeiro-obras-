@@ -171,5 +171,19 @@ window.CFG={
   key:"sb_publishable_ExFRlHwP9RnMdAmswDzDmw_Yhb-d4xj"
 };
 </script>
+
+<div id="costModal" class="cost-modal hidden" onclick="if(event.target===this)closeCostModal()">
+  <div class="cost-modal-card">
+    <div class="cost-modal-head">
+      <div>
+        <small>DETALHAMENTO</small>
+        <h3 id="costModalTitle">Composição dos custos</h3>
+      </div>
+      <button onclick="closeCostModal()">✕</button>
+    </div>
+    <div id="costModalBody"></div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body></html>
