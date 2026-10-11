@@ -40,6 +40,13 @@
   <div class="period">
     <label>Início<input id="filterStart" type="date"></label>
     <label>Fim<input id="filterEnd" type="date"></label>
+    <label>Equipe / medição
+      <select id="teamFilter" onchange="updateMeasurementHint();renderDashboard()">
+        <option value="">Todas as equipes</option>
+      </select>
+    </label>
+    <button type="button" class="secondary measurement-btn" onclick="applyMeasurementPeriod()">Aplicar período da medição</button>
+    <div id="measurementHint" class="measurement-hint"></div>
     <button onclick="renderDashboard()">Atualizar</button>
   </div>
 

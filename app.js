@@ -74,7 +74,7 @@ async function loadCloud(){
     resultado:Number(x.lucro_prejuizo||0),margem:Number(x.margem||0),custoUnidade:Number(x.custo_unidade||0),
     alerta:x.alerta||''
   }));
-  fillSelects();renderDashboard();renderLaunches();renderRegisters();renderDRE();
+  fillSelects();fillTeamFilter();renderDashboard();renderLaunches();renderRegisters();renderDRE();
 }
 
 function go(id){
@@ -180,10 +180,87 @@ function openTeamCostDetail(obra,equipe,start,end){
 }
 function closeCostModal(){document.getElementById('costModal').classList.add('hidden')}
 
+
+function teamKey(obra,equipe){return `${obra}|${equipe}`}
+function fillTeamFilter(){
+  if(!window.teamFilter)return;
+  const current=teamFilter.value;
+  const teams=[...new Map(state.contracts
+    .filter(c=>c.ativo!==false)
+    .map(c=>[teamKey(c.obra,c.equipe),{obra:c.obra,equipe:c.equipe}])).values()]
+    .sort((a,b)=>(a.obra+' '+a.equipe).localeCompare(b.obra+' '+b.equipe));
+  teamFilter.innerHTML='<option value="">Todas as equipes</option>'+teams.map(t=>`<option value="${teamKey(t.obra,t.equipe)}">${t.obra} · ${t.equipe}</option>`).join('');
+  if([...teamFilter.options].some(o=>o.value===current))teamFilter.value=current;
+  updateMeasurementHint();
+}
+function selectedTeam(){
+  if(!window.teamFilter||!teamFilter.value)return null;
+  const [obra,equipe]=teamFilter.value.split('|');
+  return {obra,equipe};
+}
+function measurementRule(obra,equipe){
+  if(obra==='Rondon'&&(equipe==='Felipe'||equipe==='Josenildo')){
+    return {type:'15-15',label:'Medição Via Rondon: dia 15 ao dia 15 do mês seguinte'};
+  }
+  if(obra==='CSM'&&equipe==='Francisco'){
+    return {type:'01-30',label:'Medição CSM: dia 01 ao dia 30'};
+  }
+  return null;
+}
+function updateMeasurementHint(){
+  if(!window.measurementHint)return;
+  const t=selectedTeam();
+  if(!t){
+    measurementHint.textContent='Selecione uma equipe para aplicar o ciclo padrão de medição.';
+    return;
+  }
+  const r=measurementRule(t.obra,t.equipe);
+  measurementHint.textContent=r?r.label:'Esta equipe ainda não possui ciclo padrão configurado.';
+}
+function isoLocal(y,m,d){
+  const dt=new Date(y,m-1,d,12,0,0);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function applyMeasurementPeriod(){
+  const t=selectedTeam();
+  if(!t)return alert('Selecione uma equipe primeiro.');
+  const rule=measurementRule(t.obra,t.equipe);
+  if(!rule)return alert('Esta equipe ainda não possui ciclo padrão de medição.');
+
+  const ref=filterEnd.value?new Date(filterEnd.value+'T12:00:00'):new Date();
+  let start,end;
+
+  if(rule.type==='15-15'){
+    const y=ref.getFullYear(),m=ref.getMonth()+1,d=ref.getDate();
+    if(d>=15){
+      start=isoLocal(y,m,15);
+      end=isoLocal(y,m+1,15);
+    }else{
+      start=isoLocal(y,m-1,15);
+      end=isoLocal(y,m,15);
+    }
+  }else if(rule.type==='01-30'){
+    const y=ref.getFullYear(),m=ref.getMonth()+1;
+    start=isoLocal(y,m,1);
+    const last=new Date(y,m,0).getDate();
+    end=isoLocal(y,m,Math.min(30,last));
+  }
+
+  filterStart.value=start;
+  filterEnd.value=end;
+  updateMeasurementHint();
+  renderDashboard();
+}
+
 function renderDashboard(){
  const s=filterStart.value||monthStart(),e=filterEnd.value||isoToday();filterStart.value=s;filterEnd.value=e;
- const data=rangeData(s,e),receita=sum(data,x=>x.receita),custo=sum(data,x=>x.custo),res=receita-custo,margem=receita?res/receita:0;
- kpis.innerHTML=`<div class="kpi"><span>Receita</span><b>${brl(receita)}</b></div><div class="kpi"><span>Custos</span><b>${brl(custo)}</b></div><div class="kpi ${res>=0?'good':'bad'}"><span>Resultado</span><b>${brl(res)}</b></div><div class="kpi ${margem>=0?'good':'bad'}"><span>Margem</span><b>${num(margem*100,1)}%</b></div>`;
+ let data=rangeData(s,e);
+ const team=selectedTeam();
+ if(team)data=data.filter(x=>x.obra===team.obra&&x.equipe===team.equipe);
+ const receita=sum(data,x=>x.receita),custo=sum(data,x=>x.custo),res=receita-custo,margem=receita?res/receita:0;
+ updateMeasurementHint();
+ const teamLabel=team?`${team.obra} · ${team.equipe}`:'Todas as equipes';
+ kpis.innerHTML=`<div class="dashboard-scope">Período: ${s.split('-').reverse().join('/')} a ${e.split('-').reverse().join('/')} · ${teamLabel}</div><div class="kpi"><span>Receita</span><b>${brl(receita)}</b></div><div class="kpi"><span>Custos</span><b>${brl(custo)}</b></div><div class="kpi ${res>=0?'good':'bad'}"><span>Resultado</span><b>${brl(res)}</b></div><div class="kpi ${margem>=0?'good':'bad'}"><span>Margem</span><b>${num(margem*100,1)}%</b></div>`;
  const map={};data.forEach(x=>{const k=x.obra+'|'+x.equipe;if(!map[k])map[k]={obra:x.obra,equipe:x.equipe,prodT:0,prodM2:0,receita:0,custo:0};const m=map[k];if(x.unidade==='m²')m.prodM2+=x.producao;else m.prodT+=x.producao;m.receita+=x.receita;m.custo+=x.custo});
  summaryList.innerHTML=Object.values(map).sort((a,b)=>(b.receita-b.custo)-(a.receita-a.custo)).map(x=>{const r=x.receita-x.custo,mg=x.receita?r/x.receita:0;return `<div class="summary-card"><div class="head"><div><b>${x.obra}</b><div class="meta">${x.equipe}</div></div><div class="money ${r>=0?'good':'bad'}">${brl(r)}</div></div><div class="mini-grid"><div><span>Receita</span><b>${brl(x.receita)}</b></div><button class="mini-drill" onclick="openTeamCostDetail('${x.obra.replaceAll("'","\'")}','${x.equipe.replaceAll("'","\'")}','${s}','${e}')"><span>Custo</span><b>${brl(x.custo)} ›</b></button><div><span>Margem</span><b>${num(mg*100,1)}%</b></div><div><span>Produção t</span><b>${num(x.prodT,2)}</b></div><div><span>Produção m²</span><b>${num(x.prodM2,2)}</b></div></div></div>`}).join('')||'<div class="card">Sem lançamentos no período.</div>'
 }
